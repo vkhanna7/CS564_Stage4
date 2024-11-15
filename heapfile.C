@@ -1,6 +1,7 @@
 #include "heapfile.h"
 #include "error.h"
 
+
 // routine to create a heapfile
 const Status createHeapFile(const string fileName)
 {
@@ -17,18 +18,47 @@ const Status createHeapFile(const string fileName)
     {
 		// file doesn't exist. First create it and allocate
 		// an empty header page and data page.
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
+
+        status = db.createFile(fileName);
+
+        status - db.openFile(fileName, file);
+        if(status != OK) return status;
+
+        hdrPage = (FileHdrPage*) newPage;
+        //Header should be the first page
+        hdrPageNo = newPageNo;  
+
+        strcpy(hdrPage->fileName, fileName.c_str());
+        if (strlen(hdrPage->fileName) == 0) {
+                     return BADFILE; // Propagate the error
+;
+            }
+
+
+        //Allocating the Page 
+        status = bufMgr->allocPage(file, newPageNo, newPage);
+        if(status != OK) return status;
+
+        newPage->init(newPageNo);
+
+        //Adding info to the header 
+        hdrPage->pageCnt = 1;
+        hdrPage->recCnt = 0;
+        hdrPage->firstPage = newPageNo;
+        hdrPage->lastPage = newPageNo;
+
+
+        // Clean up: Unpin and dirty 
+        status = bufMgr->unPinPage(file, hdrPageNo, true);
+        if(status != OK) return status;
+
+        status = bufMgr->unPinPage(file, newPageNo, true);
+        if(status != OK) return status;
+
+        status = db.closeFile(file);
+        if(status != OK) return status;
+
+        return OK;		
 		
     }
     return (FILEEXISTS);
@@ -119,12 +149,16 @@ const Status HeapFile::getRecord(const RID & rid, Record & rec)
 {
     Status status;
 
+    if(rid.pageNo != curPageNo){
+        bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
+        curPageNo = rid.pageNo;
+        bufMgr->readPage(filePtr, curPageNo, curPage);
+        curDirtyFlag = false;
+    }
     // cout<< "getRecord. record (" << rid.pageNo << "." << rid.slotNo << ")" << endl;
-   
-   
-   
-   
-   
+    status = curPage->getRecord(rid, rec);
+
+    return status;  
    
    
 }
