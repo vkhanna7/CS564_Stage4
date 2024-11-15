@@ -23,12 +23,9 @@ const Status createHeapFile(const string fileName)
 
         status - db.openFile(fileName, file);
         if(status != OK) return status;
-<<<<<<< HEAD
-=======
         
         status = bufMgr->allocPage(file, newPageNo, newPage);
         if (status != OK) return status;
->>>>>>> 2a58b53 (all passing)
 
         hdrPage = (FileHdrPage*) newPage;
         //Header should be the first page
@@ -37,11 +34,6 @@ const Status createHeapFile(const string fileName)
         strcpy(hdrPage->fileName, fileName.c_str());
         if (strlen(hdrPage->fileName) == 0) {
                      return BADFILE; // Propagate the error
-<<<<<<< HEAD
-;
-=======
-
->>>>>>> 2a58b53 (all passing)
             }
 
 
