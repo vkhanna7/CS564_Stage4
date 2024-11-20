@@ -538,7 +538,6 @@ const Status InsertFileScan::insertRecord(const Record &rec, RID &outRid)
     Page *newPage;
     int newPageNo;
     Status status;
-    bool unpinstatus = false;
     RID rid;
 
     // Check for very large records
