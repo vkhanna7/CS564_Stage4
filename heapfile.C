@@ -525,10 +525,9 @@ InsertFileScan::~InsertFileScan()
 }
 
 /**
- * Inserts the record described by `rec` into the file, returning the RID of the inserted record in `outRid`.
+ * Inserts the record rec into the file, returning the RID of the inserted record in outRid.
  * If the current page is NULL, the method reads the last page into the buffer. If the record cannot fit on
- * the current page, a new page is allocated and properly linked, and the record is inserted there. All necessary
- * bookkeeping is performed after a successful insertion.
+ * the current page, a new page is allocated and properly linked, and the record is inserted there.
  *
  * @param rec - The record to be inserted.
  * @param outRid - A reference to the RID where the inserted record's location will be stored.
