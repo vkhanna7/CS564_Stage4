@@ -4,7 +4,7 @@
 /******************************************************************************
  * File: heapfile.C
  * 
- * Purpose: This file implements the a file manager for heap files. It provides
+ * Purpose: This file implements the a file manager for heap files. It also provides
  *          a mechanism that allows to search a heap file for records that match
  *          a given filter.
  * 
@@ -189,7 +189,7 @@ const int HeapFile::getRecCnt() const
 }
 
 /**
- * Retrieves a record from the file based on the provided record ID (RID).
+ * Retrieves a record from the file based on the provided RID.
  * If the record is not on the currently pinned page, the current page is 
  * unpinned and the required page is read into the buffer pool and pinned.
  * A pointer to the retrieved record is returned via the rec parameter.
@@ -391,7 +391,7 @@ const Status HeapFileScan::scanNext(RID& outRid)
 
                     curRec = nextRid;  // Update the current record ID
 
-                    // If the record matches the search predicate, output it
+                    // If the record matches the search, output it
                     if (matchRec(rec)) {
                         outRid = nextRid;  // Return the matching record ID
                         return OK;  // Successfully found a match
@@ -525,100 +525,91 @@ InsertFileScan::~InsertFileScan()
 }
 
 /**
- * Inserts a new record into the heap file. If the current page has enough
- * space, the record is inserted there. Otherwise, a new page is allocated
- * and initialized, and the record is inserted into the newly allocated page.
+ * Inserts the record described by `rec` into the file, returning the RID of the inserted record in `outRid`.
+ * If the current page is NULL, the method reads the last page into the buffer. If the record cannot fit on
+ * the current page, a new page is allocated and properly linked, and the record is inserted there. All necessary
+ * bookkeeping is performed after a successful insertion.
  *
  * @param rec - The record to be inserted.
  * @param outRid - A reference to the RID where the inserted record's location will be stored.
  * @return Status - The status of the insertion process (OK if successful, or an error status).
  */
-const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
+const Status InsertFileScan::insertRecord(const Record &rec, RID &outRid)
 {
-    Page*	newPage;
-    int		newPageNo;
-    Status	status;
-    bool unpinstatus;
-    RID		rid;
+    Page *newPage;
+    int newPageNo;
+    Status status;
+    bool unpinstatus = false;
+    RID rid;
 
-    // check for very large records
-    if ((unsigned int) rec.length > PAGESIZE-DPFIXED)
+    // Check for very large records
+    if ((unsigned int) rec.length > PAGESIZE - DPFIXED)
     {
-        // will never fit on a page, so don't even bother looking
+        // Will never fit on a page, so don't even bother looking
         return INVALIDRECLEN;
     }
 
-    // Get lastPage
-    newPageNo = headerPage->lastPage;
-    unpinstatus = false;
-    while(true){
-
-        // Get next page
-        if (newPageNo == -1) {
-
-            // No more pages, need to allocate new page
-            status = bufMgr->allocPage(filePtr, newPageNo, newPage);
-            if (status != OK) return status;
-
-            // Set allocated page as next page
-            curPage->setNextPage(newPageNo);
-
-            // Initialize allocated page
-            curDirtyFlag = true;
-            status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
-            if (status != OK) return status;
-
-            // Initialize new page
-            newPage->init(newPageNo);
-            unpinstatus = true;
-            curDirtyFlag = true;
-            headerPage->lastPage = newPageNo;
-            curPageNo = newPageNo;
-            curPage = newPage;
-        } else {
-
-            // Otherwise read new page into buffer
-            if (curPage != NULL) {
-                status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
-                if (status != OK) return status;
-            }
-
+    // If the current page is NULL, initialize it to the last page
+    if (curPage == NULL)
+    {
+        newPageNo = headerPage->lastPage;
+        if (newPageNo != -1)
+        {
             status = bufMgr->readPage(filePtr, newPageNo, curPage);
             if (status != OK) return status;
+
             curPageNo = newPageNo;
             curDirtyFlag = false;
-            unpinstatus = false;
         }
-        // Insert the record onto the allocated page
+    }
+
+    // Loop to handle insertion or allocation of new pages
+    while (true)
+    {
+        // Attempt to insert the record on the current page
         status = curPage->insertRecord(rec, rid);
 
-        // Check record was inserted correctly
-        if (status == OK || status != NOSPACE) {
-
-            // RID is now the current record
-            unpinstatus = true;
-
-            // File modified, set dirty bit
-            curDirtyFlag = true;
+        if (status == OK)
+        {
+            // Record successfully inserted, perform bookkeeping
             outRid = rid;
             curRec = rid;
+            curDirtyFlag = true;
 
-            // Update header
+            // Update header information
             headerPage->recCnt++;
-
-            // Header modified as well
             hdrDirtyFlag = true;
-        }
-        // Return error status if necessary
-        if (status != OK && status != NOSPACE) return status;
 
-        // newPageNo is either newly setup page or equal to current page
-        status = curPage->getNextPage(newPageNo);
-
-        if (status != OK) return status;
-        // Done inserting record
-        if (unpinstatus == true) {
             return OK;
         }
+
+        if (status != NOSPACE)
+        {
+            // Return any other error
+            return status;
+        }
+
+        // If there's no space, allocate a new page
+        status = bufMgr->allocPage(filePtr, newPageNo, newPage);
+        if (status != OK) return status;
+
+        // Initialize the new page and link it to the file
+        newPage->init(newPageNo);
+        curPage->setNextPage(newPageNo);
+
+        // Unpin the current page after linking it to the new page
+        status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
+        if (status != OK) return status;
+
+        // Update header to reflect the new last page
+        headerPage->lastPage = newPageNo;
+        hdrDirtyFlag = true;
+
+        // Set the current page to the new page
+        curPage = newPage;
+        curPageNo = newPageNo;
+        curDirtyFlag = true;
+
+        // Continue the loop to retry inserting the record into the newly allocated page
     }
 }
